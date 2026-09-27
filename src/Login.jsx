@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from './supabaseClient'
 
-const ALLOWED_EMAIL = 'miihendraa@gmail.com'
+const ALLOWED_EMAIL = import.meta.env.VITE_ALLOWED_EMAIL?.trim() ?? ''
 
 export default function Login() {
   const [email, setEmail] = useState('')
