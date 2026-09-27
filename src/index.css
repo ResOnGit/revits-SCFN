@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+.month-swap {
+  transition-property: opacity, transform;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.month-swap[data-phase='out'],
+.month-swap[data-phase='in'] {
+  will-change: opacity, transform;
+}
+
+.month-swap[data-phase='out'][data-dir='next'] {
+  opacity: 0;
+  transform: translate3d(-12px, 0, 0);
+}
+
+.month-swap[data-phase='out'][data-dir='prev'] {
+  opacity: 0;
+  transform: translate3d(12px, 0, 0);
+}
+
+.month-swap[data-phase='in'] {
+  transition: none;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+}
+
+.month-swap[data-phase='in'][data-dir='next'] {
+  animation-name: month-in-next;
+}
+
+.month-swap[data-phase='in'][data-dir='prev'] {
+  animation-name: month-in-prev;
+}
+
+@keyframes month-in-next {
+  from {
+    opacity: 0;
+    transform: translate3d(12px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes month-in-prev {
+  from {
+    opacity: 0;
+    transform: translate3d(-12px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .month-swap,
+  .month-swap[data-phase='out'],
+  .month-swap[data-phase='in'] {
+    transition: none;
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.auth-fade {
+  transition-property: opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.auth-fade[data-phase='out'] {
+  opacity: 0;
+}
+
+.auth-fade[data-phase='in'] {
+  animation-name: auth-in;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+}
+
+@keyframes auth-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-fade,
+  .auth-fade[data-phase='out'],
+  .auth-fade[data-phase='in'] {
+    transition: none;
+    animation: none;
+    opacity: 1;
+  }
+}
