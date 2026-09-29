@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import LoginGlobe from './LoginGlobe.jsx'
 import { RevitsMark } from './RevitsMark.jsx'
 import { supabase } from './supabaseClient'
 
@@ -33,8 +34,9 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-zinc-900">
-      <form onSubmit={sendLink} className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6">
+    <div className="login-screen text-zinc-900">
+      <LoginGlobe />
+      <form onSubmit={sendLink} className="relative z-10 w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.35)]">
         <p className="text-sm font-medium text-zinc-500">Shortcuts Finance</p>
         <h1 className="mt-1 flex items-baseline gap-2 text-2xl font-semibold tracking-tight">
           <RevitsMark pulse />
