@@ -1,6 +1,8 @@
 import { ChevronLeft, ChevronRight, Receipt, Tags, Wallet } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { BUDGET, isOutOfBudget, typeLabel, weekLabel, weeksInMonth } from './budget.js'
 import Login from './Login.jsx'
+import { RevitsMark } from './RevitsMark.jsx'
 import { supabase } from './supabaseClient'
 
 const TIMEZONE = 'Asia/Kuala_Lumpur'
@@ -40,10 +42,16 @@ function klParts(value) {
   return { year: pick('year'), month: pick('month'), day: pick('day') }
 }
 
+const weekdayFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone: TIMEZONE,
+  weekday: 'short',
+})
+
 function formatDate(value) {
   const parts = value ? klParts(value) : null
   if (!parts) return '—'
-  return `${parts.day} ${MONTHS[parts.month - 1]}`
+  const weekday = weekdayFormat.format(value instanceof Date ? value : new Date(value))
+  return `${weekday} ${parts.day} ${MONTHS[parts.month - 1]}`
 }
 
 function monthTitle(year, month) {
@@ -55,82 +63,150 @@ function shiftMonth({ year, month }, delta) {
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1 }
 }
 
-const REVITS = 'revits'
 const SWAP_OUT_MS = 180
 const SWAP_IN_MS = 280
+const SLICE_COLORS = [
+  '#18181b',
+  '#3f3f46',
+  '#57534e',
+  '#78716c',
+  '#a8a29e',
+  '#44403c',
+  '#292524',
+  '#71717a',
+  '#a1a1aa',
+  '#d6d3d1',
+]
+const OUT_COLOR = '#8f454c'
+const RING_INK = [244, 244, 245]
+const RING_MAROON = [158, 74, 84]
+const MAROON_AT = 0.78
 
-function runRevitsWave(letters, frame, hovering, loop) {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return () => {}
-  const handle = { id: 0 }
-  const start = performance.now()
-
-  const step = (now) => {
-    const elapsed = now - start
-    const local = loop && hovering.current ? elapsed % 1500 : elapsed
-    for (let i = 0; i < REVITS.length; i += 1) {
-      const el = letters.current[i]
-      if (!el) continue
-      const delay = (REVITS.charCodeAt(i) - 97) * 34
-      const t = local - delay
-      const y = t >= 0 && t <= 460 ? Math.sin((t / 460) * Math.PI) * -7 : 0
-      el.style.transform = `translateY(${y}px)`
-    }
-    if ((loop && hovering.current) || elapsed < 1500) {
-      handle.id = requestAnimationFrame(step)
-      frame.current = handle.id
-    }
-  }
-
-  cancelAnimationFrame(frame.current)
-  handle.id = requestAnimationFrame(step)
-  frame.current = handle.id
-  return () => cancelAnimationFrame(handle.id)
+function mixRgb(from, to, t) {
+  const channels = [0, 1, 2].map((index) => Math.round(from[index] + (to[index] - from[index]) * t))
+  return `rgb(${channels.join(' ')})`
 }
 
-function RevitsMark({ wave }) {
-  const letters = useRef([])
-  const frame = useRef(0)
-  const hovering = useRef(false)
+function ringColor(t) {
+  if (t <= MAROON_AT) return `rgb(${RING_INK.join(' ')})`
+  const blend = (t - MAROON_AT) / (1 - MAROON_AT)
+  return mixRgb(RING_INK, RING_MAROON, blend)
+}
 
-  useEffect(() => () => cancelAnimationFrame(frame.current), [])
-
-  useEffect(() => {
-    if (wave === 0) return undefined
-    return runRevitsWave(letters, frame, hovering, hovering.current)
-  }, [wave])
-
-  function stop() {
-    hovering.current = false
-    cancelAnimationFrame(frame.current)
-    letters.current.forEach((el) => {
-      if (el) el.style.transform = 'translateY(0px)'
-    })
+function ringFill(progress) {
+  const ink = `rgb(${RING_INK.join(' ')})`
+  if (progress <= 0) return 'transparent'
+  const end = progress * 360
+  const maroonDeg = MAROON_AT * 360
+  if (progress <= MAROON_AT) {
+    return `conic-gradient(from 0deg, ${ink} 0deg ${end}deg, transparent ${end}deg 360deg)`
   }
+  const tip = ringColor(progress)
+  if (progress >= 1) {
+    return `conic-gradient(from 0deg, ${ink} 0deg ${maroonDeg}deg, ${tip} 360deg)`
+  }
+  return `conic-gradient(from 0deg, ${ink} 0deg ${maroonDeg}deg, ${tip} ${end}deg, transparent ${end}deg 360deg)`
+}
+
+const RING_MASK =
+  'radial-gradient(farthest-side, transparent calc(100% - 16px), #000 calc(100% - 15px) calc(100% - 3px), transparent calc(100% - 2px))'
+
+function BudgetRing({ spent, cap, blank }) {
+  const progress = blank || cap <= 0 ? 0 : Math.min(Math.max(spent, 0) / cap, 1)
+  const label = blank
+    ? 'Budget ring'
+    : `In budget ${money.format(Math.max(spent, 0))} of ${money.format(cap)}`
 
   return (
-    <span
-      role="img"
-      aria-label="revits"
-      className="inline-flex cursor-default select-none text-[0.95rem] font-medium tracking-wide text-zinc-500"
-      onMouseEnter={() => {
-        hovering.current = true
-        runRevitsWave(letters, frame, hovering, true)
-      }}
-      onMouseLeave={stop}
-    >
-      {REVITS.split('').map((letter, index) => (
-        <span
-          key={`${letter}-${index}`}
-          aria-hidden="true"
-          ref={(node) => {
-            letters.current[index] = node
-          }}
-          className="inline-block"
-        >
-          {letter}
-        </span>
-      ))}
-    </span>
+    <div className="relative h-36 w-36" role="img" aria-label={label}>
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{ background: 'rgba(255,255,255,0.14)', WebkitMask: RING_MASK, mask: RING_MASK }}
+      />
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{ background: ringFill(progress), WebkitMask: RING_MASK, mask: RING_MASK }}
+      />
+    </div>
+  )
+}
+
+function shade(hex, amount) {
+  const value = hex.slice(1)
+  const channels = [0, 2, 4].map((offset) => {
+    const channel = Number.parseInt(value.slice(offset, offset + 2), 16)
+    return Math.max(0, Math.min(255, Math.round(channel * amount)))
+  })
+  return `rgb(${channels.join(' ')})`
+}
+
+function wedgePath(start, end, radius) {
+  const sweep = end - start
+  if (sweep >= Math.PI * 2 - 0.0001) {
+    return `M 50 ${50 - radius} A ${radius} ${radius} 0 1 1 50 ${50 + radius} A ${radius} ${radius} 0 1 1 50 ${50 - radius} Z`
+  }
+  const x0 = 50 + radius * Math.cos(start)
+  const y0 = 50 + radius * Math.sin(start)
+  const x1 = 50 + radius * Math.cos(end)
+  const y1 = 50 + radius * Math.sin(end)
+  const large = sweep > Math.PI ? 1 : 0
+  return `M 50 50 L ${x0} ${y0} A ${radius} ${radius} 0 ${large} 1 ${x1} ${y1} Z`
+}
+
+function buildSlices(entries) {
+  const usable = entries.filter(([, amount]) => amount > 0)
+  const total = usable.reduce((sum, [, amount]) => sum + amount, 0)
+  if (total <= 0) return []
+
+  let angle = -Math.PI / 2
+  let colorIndex = 0
+  return usable.map(([type, amount]) => {
+    const sweep = (amount / total) * Math.PI * 2
+    const gap = usable.length > 1 && sweep > 0.09 ? 0.03 : 0
+    const path = wedgePath(angle + gap / 2, angle + sweep - gap / 2, 42)
+    angle += sweep
+    const color = isOutOfBudget(type) ? OUT_COLOR : SLICE_COLORS[colorIndex++ % SLICE_COLORS.length]
+    return { type, amount, color, crust: shade(color, 0.62), d: path }
+  })
+}
+
+const CRUST_LAYERS = [-15, -12, -9, -6, -3, 0]
+
+function SpendPie({ slices, selected, onToggle }) {
+  const ordered = slices.some((slice) => slice.type === selected)
+    ? [...slices.filter((slice) => slice.type !== selected), slices.find((slice) => slice.type === selected)]
+    : slices
+
+  return (
+    <div className="pie-stage relative mx-auto h-[220px] w-[220px]" aria-hidden="true">
+      <div className="pointer-events-none absolute top-[58%] left-1/2 h-8 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-900/15 blur-md" />
+      <div className="pie-tilt relative h-full w-full">
+        {ordered.map((slice) => {
+          const quiet = Boolean(selected) && selected !== slice.type
+          return (
+            <div key={slice.type} className="pie-slice" data-up={selected === slice.type}>
+              {CRUST_LAYERS.map((depth) => (
+                <div
+                  key={depth}
+                  className="pointer-events-none absolute inset-0"
+                  style={{ transform: `translateZ(${depth}px)` }}
+                >
+                  <svg viewBox="0 0 100 100" className="pointer-events-none h-full w-full overflow-visible">
+                    <path
+                      d={slice.d}
+                      fill={depth === 0 ? slice.color : slice.crust}
+                      fillOpacity={quiet ? 0.38 : 1}
+                      className="pointer-events-auto cursor-pointer"
+                      onClick={() => onToggle(slice.type)}
+                    />
+                  </svg>
+                </div>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -142,6 +218,8 @@ function Dashboard() {
     const today = klParts(new Date())
     return { year: today.year, month: today.month }
   })
+  const [selectedType, setSelectedType] = useState(null)
+  const [selectedWeek, setSelectedWeek] = useState(null)
   const [swap, setSwap] = useState({ phase: 'shown', direction: 'next' })
   const [wave, setWave] = useState(0)
   const swapTimer = useRef(0)
@@ -156,6 +234,8 @@ function Dashboard() {
     if (swapBusy.current) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setSelectedMonth((month) => shiftMonth(month, delta))
+      setSelectedType(null)
+      setSelectedWeek(null)
       return
     }
 
@@ -165,6 +245,8 @@ function Dashboard() {
     setSwap({ phase: 'out', direction })
     swapTimer.current = window.setTimeout(() => {
       setSelectedMonth((month) => shiftMonth(month, delta))
+      setSelectedType(null)
+      setSelectedWeek(null)
       setSwap({ phase: 'in', direction })
       swapTimer.current = window.setTimeout(() => {
         setSwap({ phase: 'shown', direction })
@@ -207,17 +289,59 @@ function Dashboard() {
   )
 
   const totalSpent = monthTransactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0)
+  const budgetSpent = monthTransactions.reduce((sum, tx) => {
+    if (isOutOfBudget(tx.type)) return sum
+    return sum + Number(tx.amount || 0)
+  }, 0)
+  const blank = loading || Boolean(displayError)
 
   const byType = useMemo(() => {
     const totals = new Map()
     for (const tx of monthTransactions) {
-      const type = tx.type?.trim() || 'Untyped'
+      const type = typeLabel(tx.type)
       totals.set(type, (totals.get(type) ?? 0) + Number(tx.amount || 0))
     }
     return [...totals.entries()].sort((a, b) => b[1] - a[1])
   }, [monthTransactions])
 
-  const largestType = byType[0]?.[1] ?? 0
+  const slices = useMemo(() => buildSlices(byType), [byType])
+
+  const weeks = useMemo(
+    () => weeksInMonth(selectedMonth.year, selectedMonth.month),
+    [selectedMonth.year, selectedMonth.month],
+  )
+
+  const activeWeek = weeks.find((week) => week.index === selectedWeek) ?? null
+
+  const weeksWithSpend = useMemo(() => {
+    const found = new Set()
+    for (const tx of monthTransactions) {
+      const day = tx.date ? klParts(tx.date)?.day : null
+      if (day == null) continue
+      const week = weeks.find((item) => day >= item.start && day <= item.end)
+      if (week) found.add(week.index)
+    }
+    return found
+  }, [monthTransactions, weeks])
+
+  const recentTransactions = useMemo(() => {
+    return monthTransactions.filter((tx) => {
+      if (selectedType && typeLabel(tx.type) !== selectedType) return false
+      if (activeWeek) {
+        const day = tx.date ? klParts(tx.date)?.day : null
+        if (day == null || day < activeWeek.start || day > activeWeek.end) return false
+      }
+      return true
+    })
+  }, [monthTransactions, selectedType, activeWeek])
+
+  function toggleType(type) {
+    setSelectedType((current) => (current === type ? null : type))
+  }
+
+  function toggleWeek(index) {
+    setSelectedWeek((current) => (current === index ? null : index))
+  }
 
   return (
     <div className="relative min-h-screen bg-zinc-50 text-zinc-900">
@@ -284,8 +408,14 @@ function Dashboard() {
             Total spent
           </div>
           <p className="mt-3 text-4xl font-semibold tracking-tight tabular-nums">
-            {loading || displayError ? '—' : money.format(totalSpent)}
+            {blank ? '—' : money.format(totalSpent)}
           </p>
+          <div className="mt-6 flex flex-col items-center">
+            <BudgetRing spent={budgetSpent} cap={BUDGET} blank={blank} />
+            <p className={`mt-2 text-sm tabular-nums ${!blank && budgetSpent > BUDGET ? 'text-rose-200' : 'text-zinc-300'}`}>
+              {blank ? '—' : `${money.format(budgetSpent)} / ${money.format(BUDGET)}`}
+            </p>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-6">
@@ -297,32 +427,37 @@ function Dashboard() {
             <p className="text-sm text-zinc-400">Loading…</p>
           ) : displayError ? (
             <p className="text-sm text-zinc-400">Couldn't load this month.</p>
-          ) : byType.length === 0 ? (
+          ) : slices.length === 0 ? (
             <p className="text-sm text-zinc-400">No spending this month.</p>
           ) : (
-            <ul className="flex flex-col gap-3">
-              {byType.map(([type, amount]) => (
-                <li key={type}>
-                  <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
-                    <span className="font-medium">{type}</span>
-                    <span className="tabular-nums text-zinc-600">{money.format(amount)}</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100">
-                    <div
-                      className="h-full rounded-full bg-zinc-900"
-                      style={{
-                        width: `${largestType > 0 ? (Math.max(amount, 0) / largestType) * 100 : 0}%`,
-                      }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <>
+              <SpendPie slices={slices} selected={selectedType} onToggle={toggleType} />
+              <ul className="mt-2 flex flex-col gap-1">
+                {slices.map((slice) => {
+                  const on = selectedType === slice.type
+                  const quiet = Boolean(selectedType) && !on
+                  return (
+                    <li key={slice.type}>
+                      <button
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => toggleType(slice.type)}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm ${on ? 'bg-zinc-100' : 'hover:bg-zinc-50'} ${quiet ? 'text-zinc-400' : ''}`}
+                      >
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: slice.color }} />
+                        <span className="min-w-0 flex-1 truncate font-medium">{slice.type}</span>
+                        <span className="tabular-nums">{money.format(slice.amount)}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
           )}
         </section>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-6">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-zinc-500">
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-500">
             <Receipt size={16} />
             Recent
           </div>
@@ -330,32 +465,55 @@ function Dashboard() {
             <p className="text-sm text-red-600">{displayError}</p>
           ) : loading ? (
             <p className="text-sm text-zinc-400">Loading…</p>
-          ) : monthTransactions.length === 0 ? (
-            <p className="text-sm text-zinc-400">No transactions this month.</p>
           ) : (
-            <ul>
-              {monthTransactions.map((tx) => (
-                <li
-                  key={tx.id}
-                  className="flex items-start justify-between gap-4 border-b border-zinc-100 py-3 last:border-b-0"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm text-zinc-500">{formatDate(tx.date)}</span>
-                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700">
-                        {tx.type?.trim() || 'Untyped'}
+            <>
+              <div className="week-row -mx-1 mb-2 flex gap-2 overflow-x-auto px-1 pb-1">
+                {weeks.map((week) => {
+                  const on = selectedWeek === week.index
+                  const empty = !weeksWithSpend.has(week.index)
+                  return (
+                    <button
+                      key={week.index}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggleWeek(week.index)}
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${on ? 'bg-zinc-900 text-white' : empty ? 'bg-zinc-50 text-zinc-400' : 'bg-zinc-100 text-zinc-700'}`}
+                    >
+                      {weekLabel(week)}
+                    </button>
+                  )
+                })}
+              </div>
+              {monthTransactions.length === 0 ? (
+                <p className="text-sm text-zinc-400">No transactions this month.</p>
+              ) : recentTransactions.length === 0 ? (
+                <p className="text-sm text-zinc-400">Nothing in this filter.</p>
+              ) : (
+                <ul>
+                  {recentTransactions.map((tx) => (
+                    <li
+                      key={tx.id}
+                      className="flex items-start justify-between gap-4 border-b border-zinc-100 py-3 last:border-b-0"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm text-zinc-500">{formatDate(tx.date)}</span>
+                          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700">
+                            {typeLabel(tx.type)}
+                          </span>
+                        </div>
+                        {tx.comment ? (
+                          <p className="mt-1 truncate text-sm text-zinc-800">{tx.comment}</p>
+                        ) : null}
+                      </div>
+                      <span className="shrink-0 text-sm font-medium tabular-nums">
+                        {money.format(Number(tx.amount || 0))}
                       </span>
-                    </div>
-                    {tx.comment ? (
-                      <p className="mt-1 truncate text-sm text-zinc-800">{tx.comment}</p>
-                    ) : null}
-                  </div>
-                  <span className="shrink-0 text-sm font-medium tabular-nums">
-                    {money.format(Number(tx.amount || 0))}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </section>
         </div>
