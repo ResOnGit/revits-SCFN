@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/favicon.svg" alt="SCFN" width="120" />
+</p>
+
 # revits-SCFN
 
 SCFN is an open-source personal spending dashboard. An iPhone Shortcut records each spend. The site shows that month’s total, a budget ring, a pie of spending by type, and the list of transactions.

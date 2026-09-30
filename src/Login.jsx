@@ -4,6 +4,7 @@ import { RevitsMark } from './RevitsMark.jsx'
 import { supabase } from './supabaseClient'
 
 const ALLOWED_EMAIL = import.meta.env.VITE_ALLOWED_EMAIL?.trim() ?? ''
+const OTP_LENGTH = 8
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -38,8 +39,8 @@ export default function Login() {
   async function verifyCode(event) {
     event.preventDefault()
     const nextToken = token.trim()
-    if (!/^\d{6}$/.test(nextToken)) {
-      setError('Enter the 6-digit code from your email.')
+    if (!/^\d{8}$/.test(nextToken)) {
+      setError('Enter the 8-digit code from your email.')
       return
     }
 
@@ -78,7 +79,7 @@ export default function Login() {
         {otpSent ? (
           <>
             <p className="mt-4 text-sm text-zinc-600">
-              Enter the 6-digit code sent to <span className="font-medium text-zinc-800">{email}</span>.
+              Enter the 8-digit code sent to <span className="font-medium text-zinc-800">{email}</span>.
             </p>
             <input
               type="text"
@@ -86,17 +87,17 @@ export default function Login() {
               autoComplete="one-time-code"
               autoFocus
               required
-              maxLength={6}
-              pattern="\d{6}"
+              maxLength={OTP_LENGTH}
+              pattern="\d{8}"
               value={token}
-              onChange={(event) => setToken(event.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="000000"
+              onChange={(event) => setToken(event.target.value.replace(/\D/g, '').slice(0, OTP_LENGTH))}
+              placeholder="00000000"
               className="mt-4 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-center text-lg tracking-[0.4em] outline-none focus:border-zinc-400"
             />
             {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
             <button
               type="submit"
-              disabled={busy || token.length !== 6}
+              disabled={busy || token.length !== OTP_LENGTH}
               className="mt-4 w-full rounded-xl bg-zinc-900 py-2.5 text-sm font-medium text-white disabled:opacity-60"
             >
               {busy ? 'Please wait…' : 'Verify'}
