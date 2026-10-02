@@ -15,7 +15,7 @@ requires minimal to no maintenance at all, security is set up by the secrets pag
 
 # As of 1.1
 New flashy UI. Dates are shown in Malaysia time, with the weekday. Amounts are shown in ringgit.
-The budget ring is capped at RM800 and ignores the type Out of budget. Clicking a pie slice filters Recent. Recent can also be filtered by week inside the month.
+The budget ring is capped at RM800 and ignores the STRING type Out of budget. Clicking a pie slice filters Recent. Recent can also be filtered by week inside the month.
 See releasenotes/1.1.md.
 
 
