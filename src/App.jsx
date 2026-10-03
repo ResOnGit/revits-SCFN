@@ -173,15 +173,11 @@ function buildSlices(entries) {
 const CRUST_LAYERS = [-15, -12, -9, -6, -3, 0]
 
 function SpendPie({ slices, selected, onToggle }) {
-  const ordered = slices.some((slice) => slice.type === selected)
-    ? [...slices.filter((slice) => slice.type !== selected), slices.find((slice) => slice.type === selected)]
-    : slices
-
   return (
     <div className="pie-stage relative mx-auto h-[220px] w-[220px]" aria-hidden="true">
       <div className="pointer-events-none absolute top-[58%] left-1/2 h-8 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-900/15 blur-md" />
       <div className="pie-tilt relative h-full w-full">
-        {ordered.map((slice) => {
+        {slices.map((slice) => {
           const quiet = Boolean(selected) && selected !== slice.type
           return (
             <div key={slice.type} className="pie-slice" data-up={selected === slice.type}>
@@ -196,7 +192,7 @@ function SpendPie({ slices, selected, onToggle }) {
                       d={slice.d}
                       fill={depth === 0 ? slice.color : slice.crust}
                       fillOpacity={quiet ? 0.38 : 1}
-                      className="pointer-events-auto cursor-pointer"
+                      className="pie-wedge pointer-events-auto cursor-pointer"
                       onClick={() => onToggle(slice.type)}
                     />
                   </svg>
@@ -221,17 +217,33 @@ function Dashboard() {
   const [selectedType, setSelectedType] = useState(null)
   const [selectedWeek, setSelectedWeek] = useState(null)
   const [swap, setSwap] = useState({ phase: 'shown', direction: 'next' })
+  const [weekSwap, setWeekSwap] = useState({ phase: 'shown', direction: 'next' })
   const [wave, setWave] = useState(0)
   const swapTimer = useRef(0)
   const swapBusy = useRef(false)
+  const weekSwapTimer = useRef(0)
+  const weekSwapBusy = useRef(false)
   const displayError = supabase
     ? error
     : 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to a .env file, then restart the dev server.'
 
-  useEffect(() => () => window.clearTimeout(swapTimer.current), [])
+  useEffect(
+    () => () => {
+      window.clearTimeout(swapTimer.current)
+      window.clearTimeout(weekSwapTimer.current)
+    },
+    [],
+  )
+
+  function settleWeekSwap() {
+    window.clearTimeout(weekSwapTimer.current)
+    weekSwapBusy.current = false
+    setWeekSwap((current) => (current.phase === 'shown' ? current : { phase: 'shown', direction: current.direction }))
+  }
 
   function showMonth(delta) {
     if (swapBusy.current) return
+    settleWeekSwap()
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setSelectedMonth((month) => shiftMonth(month, delta))
       setSelectedType(null)
@@ -335,20 +347,77 @@ function Dashboard() {
     })
   }, [monthTransactions, selectedType, activeWeek])
 
+  const weekTotal = useMemo(() => {
+    if (!activeWeek) return 0
+    return recentTransactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0)
+  }, [activeWeek, recentTransactions])
+
   function toggleType(type) {
     setSelectedType((current) => (current === type ? null : type))
   }
 
   function toggleWeek(index) {
-    setSelectedWeek((current) => (current === index ? null : index))
+    if (weekSwapBusy.current) return
+    const next = selectedWeek === index ? null : index
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setSelectedWeek(next)
+      return
+    }
+
+    const direction = next == null || (selectedWeek != null && next < selectedWeek) ? 'prev' : 'next'
+    weekSwapBusy.current = true
+    setWeekSwap({ phase: 'out', direction })
+    weekSwapTimer.current = window.setTimeout(() => {
+      setSelectedWeek(next)
+      setWeekSwap({ phase: 'in', direction })
+      weekSwapTimer.current = window.setTimeout(() => {
+        setWeekSwap({ phase: 'shown', direction })
+        weekSwapBusy.current = false
+      }, SWAP_IN_MS)
+    }, SWAP_OUT_MS)
   }
 
   return (
-    <div className="relative min-h-screen bg-zinc-50 text-zinc-900">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-size-[24px_24px] mask-no-repeat [mask-size:100%_100%] [mask-image:radial-gradient(ellipse_at_50%_38%,#000_10%,transparent_48%)] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:100%_100%] [-webkit-mask-image:radial-gradient(ellipse_at_50%_38%,#000_10%,transparent_48%)]"
-      />
+    <div className="app-canvas relative min-h-screen text-zinc-900">
+      <div aria-hidden="true" className="page-grid-mask pointer-events-none fixed inset-0 z-0">
+        <svg className="absolute h-0 w-0">
+          <filter id="grid-wave" x="-40%" y="-40%" width="180%" height="180%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.0045 0.008" numOctaves="2" seed="4" result="noise" />
+            <feOffset in="noise" dx="0" dy="0" result="drift">
+              <animate
+                attributeName="dx"
+                dur="41s"
+                repeatCount="indefinite"
+                calcMode="spline"
+                keyTimes="0;0.29;0.56;0.83;1"
+                keySplines="0.42 0 0.18 1;0.55 0.05 0.45 0.95;0.22 1 0.36 1;0.7 0 0.3 1"
+                values="0;168;-74;96;0"
+              />
+              <animate
+                attributeName="dy"
+                dur="57s"
+                repeatCount="indefinite"
+                calcMode="spline"
+                keyTimes="0;0.18;0.47;0.76;1"
+                keySplines="0.33 0 0.2 1;0.48 0.02 0.52 1;0.16 1 0.3 1;0.65 0 0.35 1"
+                values="0;84;-142;46;0"
+              />
+            </feOffset>
+            <feDisplacementMap in="SourceGraphic" in2="drift" scale="20" xChannelSelector="R" yChannelSelector="G">
+              <animate
+                attributeName="scale"
+                dur="33s"
+                repeatCount="indefinite"
+                calcMode="spline"
+                keyTimes="0;0.34;0.69;1"
+                keySplines="0.45 0 0.2 1;0.4 0 0.6 1;0.22 1 0.36 1"
+                values="14;26;11;14"
+              />
+            </feDisplacementMap>
+          </filter>
+        </svg>
+        <div className="page-grid" />
+      </div>
       <main className="relative z-10 mx-auto flex w-full max-w-xl flex-col gap-5 px-4 py-10">
         <header>
           <div className="flex items-baseline justify-between gap-4">
@@ -442,7 +511,7 @@ function Dashboard() {
                         type="button"
                         aria-pressed={on}
                         onClick={() => toggleType(slice.type)}
-                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm ${on ? 'bg-zinc-100' : 'hover:bg-zinc-50'} ${quiet ? 'text-zinc-400' : ''}`}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${on ? 'bg-zinc-100' : 'hover:bg-zinc-50'} ${quiet ? 'text-zinc-400' : ''}`}
                       >
                         <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: slice.color }} />
                         <span className="min-w-0 flex-1 truncate font-medium">{slice.type}</span>
@@ -457,9 +526,22 @@ function Dashboard() {
         </section>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-6">
-          <div className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-500">
-            <Receipt size={16} />
-            Recent
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+              <Receipt size={16} />
+              Recent
+            </div>
+            {activeWeek && !blank ? (
+              <p
+                className="month-swap shrink-0 text-sm font-medium tabular-nums"
+                data-phase={weekSwap.phase}
+                data-dir={weekSwap.direction}
+                style={{ transitionDuration: `${SWAP_OUT_MS}ms`, animationDuration: `${SWAP_IN_MS}ms` }}
+                aria-label={`${weekLabel(activeWeek)} total`}
+              >
+                {money.format(weekTotal)}
+              </p>
+            ) : null}
           </div>
           {displayError ? (
             <p className="text-sm text-red-600">{displayError}</p>
@@ -484,6 +566,12 @@ function Dashboard() {
                   )
                 })}
               </div>
+              <div
+                className="month-swap"
+                data-phase={weekSwap.phase}
+                data-dir={weekSwap.direction}
+                style={{ transitionDuration: `${SWAP_OUT_MS}ms`, animationDuration: `${SWAP_IN_MS}ms` }}
+              >
               {monthTransactions.length === 0 ? (
                 <p className="text-sm text-zinc-400">No transactions this month.</p>
               ) : recentTransactions.length === 0 ? (
@@ -513,6 +601,7 @@ function Dashboard() {
                   ))}
                 </ul>
               )}
+              </div>
             </>
           )}
         </section>
@@ -586,14 +675,14 @@ export default function App() {
 
   if (!supabase) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-sm text-red-600">
+      <div className="app-canvas flex min-h-screen items-center justify-center px-4 text-sm text-red-600">
         Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to a .env file, then restart the dev server.
       </div>
     )
   }
 
   if (!authReady || !view) {
-    return <div className="min-h-screen bg-zinc-50" />
+    return <div className="app-canvas min-h-screen" />
   }
 
   return (
