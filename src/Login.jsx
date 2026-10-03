@@ -71,9 +71,9 @@ export default function Login() {
         className="relative z-10 w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.35)]"
       >
         <p className="text-sm font-medium text-zinc-500">Shortcuts Finance</p>
-        <h1 className="mt-1 flex items-baseline gap-2 text-2xl font-semibold tracking-tight">
+        <h1 className="mt-1 flex items-center gap-2">
           <RevitsMark pulse />
-          SCFN
+          <img src="/favicon.svg" alt="SCFN" className="h-12 w-auto origin-[24%_50%] rotate-[8deg]" />
         </h1>
 
         {otpSent ? (

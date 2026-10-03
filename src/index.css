@@ -137,16 +137,40 @@
   transition: fill-opacity 560ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.tag-wiggle {
+  animation: tag-wiggle 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes tag-wiggle {
+  0% {
+    rotate: 8deg;
+  }
+  30% {
+    rotate: 16deg;
+  }
+  60% {
+    rotate: 3deg;
+  }
+  100% {
+    rotate: 8deg;
+  }
+}
+
 .app-canvas {
   background-color: #e2e2e8;
 }
 
 .page-grid-mask {
   overflow: hidden;
-  mask-image: radial-gradient(ellipse at 50% 36%, #000 28%, transparent 78%);
+  mask-image:
+    linear-gradient(to bottom, transparent 0%, transparent 14%, #000 38%),
+    radial-gradient(ellipse at 50% 64%, #000 28%, transparent 78%);
+  mask-composite: intersect;
   mask-repeat: no-repeat;
   mask-size: 100% 100%;
-  -webkit-mask-image: radial-gradient(ellipse at 50% 36%, #000 28%, transparent 78%);
+  -webkit-mask-image:
+    linear-gradient(to bottom, transparent 0%, transparent 14%, #000 38%),
+    radial-gradient(ellipse at 50% 64%, #000 28%, transparent 78%);
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: 100% 100%;
 }
@@ -179,8 +203,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pie-slice,
-  .pie-wedge {
+  .pie-wedge,
+  .tag-wiggle {
     transition: none;
+    animation: none;
   }
 
   .page-grid {

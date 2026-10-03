@@ -58,6 +58,31 @@ function monthTitle(year, month) {
   return `${MONTH_NAMES[month - 1]} ${year}`
 }
 
+function csvCell(value) {
+  const text = value == null ? '' : String(value)
+  if (/[",\n\r]/.test(text)) return `"${text.replaceAll('"', '""')}"`
+  return text
+}
+
+function exportMonthCsv(month, rows) {
+  const header = ['date', 'amount', 'type', 'comment']
+  const lines = rows.map((tx) => {
+    const parts = tx.date ? klParts(tx.date) : null
+    const date = parts
+      ? `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`
+      : ''
+    return [date, Number(tx.amount || 0), typeLabel(tx.type), tx.comment ?? ''].map(csvCell).join(',')
+  })
+  const csv = `\uFEFF${[header.join(','), ...lines].join('\r\n')}`
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `scfn-${monthTitle(month.year, month.month).toLowerCase().replace(' ', '-')}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 function shiftMonth({ year, month }, delta) {
   const shifted = new Date(Date.UTC(year, month - 1 + delta, 1))
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1 }
@@ -430,9 +455,14 @@ function Dashboard() {
               Log out
             </button>
           </div>
-          <h1 className="mt-1 flex items-baseline gap-2 text-3xl font-semibold tracking-tight">
+          <h1 className="mt-1 flex items-center gap-2">
             <RevitsMark wave={wave} />
-            SCFN
+            <img
+              key={wave}
+              src="/favicon.svg"
+              alt="SCFN"
+              className={`h-12 w-auto origin-[24%_50%] rotate-[8deg] ${wave > 0 ? 'tag-wiggle' : ''}`}
+            />
           </h1>
         </header>
 
@@ -602,6 +632,15 @@ function Dashboard() {
                 </ul>
               )}
               </div>
+              {monthTransactions.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => exportMonthCsv(selectedMonth, monthTransactions)}
+                  className="mt-3 w-full border-t border-zinc-100 pt-3 text-left text-sm text-zinc-500 hover:text-zinc-900"
+                >
+                  Export {MONTH_NAMES[selectedMonth.month - 1]}
+                </button>
+              ) : null}
             </>
           )}
         </section>
