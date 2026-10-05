@@ -4,6 +4,8 @@ import { RevitsMark } from './RevitsMark.jsx'
 import { supabase } from './supabaseClient'
 
 const ALLOWED_EMAIL = import.meta.env.VITE_ALLOWED_EMAIL?.trim() ?? ''
+const DEMO_EMAIL = 'dummy@scfn.app'
+const DEMO_PASSWORD = 'scfn-demo'
 const OTP_LENGTH = 8
 
 export default function Login() {
@@ -16,7 +18,21 @@ export default function Login() {
   async function sendCode(event) {
     event.preventDefault()
     const nextEmail = email.trim()
-    if (nextEmail !== ALLOWED_EMAIL) {
+    const normalized = nextEmail.toLowerCase()
+
+    if (normalized === DEMO_EMAIL) {
+      setBusy(true)
+      setError('')
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
+      })
+      setBusy(false)
+      if (signInError) setError(signInError.message)
+      return
+    }
+
+    if (normalized !== ALLOWED_EMAIL.toLowerCase()) {
       setError('Nice try! This is a private dashboard.')
       return
     }
@@ -24,14 +40,14 @@ export default function Login() {
     setBusy(true)
     setError('')
     const { error: sendError } = await supabase.auth.signInWithOtp({
-      email: nextEmail,
+      email: ALLOWED_EMAIL,
     })
     setBusy(false)
     if (sendError) {
       setError(sendError.message)
       return
     }
-    setEmail(nextEmail)
+    setEmail(ALLOWED_EMAIL)
     setToken('')
     setOtpSent(true)
   }
@@ -119,6 +135,8 @@ export default function Login() {
         ) : (
           <>
             <p className="mt-4 text-sm text-zinc-600">Sign in with the email for this dashboard.</p>
+            <p className="mt-4 text-sm text-zinc-600">considering a demo? </p>
+            <p className="mt-4 text-sm text-zinc-600">use dummy@scfn.app for a test run.</p>
             <input
               type="email"
               required
@@ -135,7 +153,7 @@ export default function Login() {
               disabled={busy}
               className="mt-4 w-full rounded-xl bg-zinc-900 py-2.5 text-sm font-medium text-white disabled:opacity-60"
             >
-              {busy ? 'Please wait…' : 'Send code'}
+              {busy ? 'Please wait…' : email.trim().toLowerCase() === DEMO_EMAIL ? 'Enter' : 'Send code'}
             </button>
           </>
         )}

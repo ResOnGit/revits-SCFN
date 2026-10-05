@@ -27,6 +27,15 @@ const money = new Intl.NumberFormat('en-MY', {
   currency: 'MYR',
 })
 
+// WebKit on iOS paints feTurbulence on the CPU, so the home-screen app drifts the grid instead.
+function isIosWebKit() {
+  const ua = navigator.userAgent
+  if (/iPad|iPhone|iPod/.test(ua)) return true
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
+const IOS_LITE_GRID = isIosWebKit()
+
 function klParts(value) {
   const date = value instanceof Date ? value : new Date(value)
   if (Number.isNaN(date.getTime())) return null
@@ -86,6 +95,19 @@ function exportMonthCsv(month, rows) {
 function shiftMonth({ year, month }, delta) {
   const shifted = new Date(Date.UTC(year, month - 1 + delta, 1))
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1 }
+}
+
+const DEMO_EMAIL = 'dummy@scfn.app'
+const DEMO_MONTHS = [
+  { year: 2026, month: 8 },
+  { year: 2026, month: 9 },
+  { year: 2026, month: 10 },
+]
+
+function stepMonth(month, delta, isDemo) {
+  if (!isDemo) return shiftMonth(month, delta)
+  const index = DEMO_MONTHS.findIndex((item) => item.year === month.year && item.month === month.month)
+  return DEMO_MONTHS[index + delta] ?? month
 }
 
 const SWAP_OUT_MS = 180
@@ -196,17 +218,26 @@ function buildSlices(entries) {
 }
 
 const CRUST_LAYERS = [-15, -12, -9, -6, -3, 0]
+const CRUST_LAYERS_LITE = [-8, 0]
 
 function SpendPie({ slices, selected, onToggle }) {
+  const layers = IOS_LITE_GRID ? CRUST_LAYERS_LITE : CRUST_LAYERS
   return (
     <div className="pie-stage relative mx-auto h-[220px] w-[220px]" aria-hidden="true">
-      <div className="pointer-events-none absolute top-[58%] left-1/2 h-8 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-900/15 blur-md" />
+      {IOS_LITE_GRID ? (
+        <div
+          className="pointer-events-none absolute top-[58%] left-1/2 h-10 w-40 -translate-x-1/2 -translate-y-1/2"
+          style={{ background: 'radial-gradient(ellipse, rgba(24,24,27,0.16), transparent 70%)' }}
+        />
+      ) : (
+        <div className="pointer-events-none absolute top-[58%] left-1/2 h-8 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-zinc-900/15 blur-md" />
+      )}
       <div className="pie-tilt relative h-full w-full">
         {slices.map((slice) => {
           const quiet = Boolean(selected) && selected !== slice.type
           return (
             <div key={slice.type} className="pie-slice" data-up={selected === slice.type}>
-              {CRUST_LAYERS.map((depth) => (
+              {layers.map((depth) => (
                 <div
                   key={depth}
                   className="pointer-events-none absolute inset-0"
@@ -231,11 +262,13 @@ function SpendPie({ slices, selected, onToggle }) {
   )
 }
 
-function Dashboard() {
+function Dashboard({ email }) {
+  const isDemo = email?.toLowerCase() === DEMO_EMAIL
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(Boolean(supabase))
   const [error, setError] = useState(null)
   const [selectedMonth, setSelectedMonth] = useState(() => {
+    if (email?.toLowerCase() === DEMO_EMAIL) return { year: 2026, month: 9 }
     const today = klParts(new Date())
     return { year: today.year, month: today.month }
   })
@@ -268,9 +301,15 @@ function Dashboard() {
 
   function showMonth(delta) {
     if (swapBusy.current) return
+    if (isDemo) {
+      const index = DEMO_MONTHS.findIndex(
+        (item) => item.year === selectedMonth.year && item.month === selectedMonth.month,
+      )
+      if (index < 0 || index + delta < 0 || index + delta >= DEMO_MONTHS.length) return
+    }
     settleWeekSwap()
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setSelectedMonth((month) => shiftMonth(month, delta))
+      setSelectedMonth((month) => stepMonth(month, delta, isDemo))
       setSelectedType(null)
       setSelectedWeek(null)
       return
@@ -281,7 +320,7 @@ function Dashboard() {
     swapBusy.current = true
     setSwap({ phase: 'out', direction })
     swapTimer.current = window.setTimeout(() => {
-      setSelectedMonth((month) => shiftMonth(month, delta))
+      setSelectedMonth((month) => stepMonth(month, delta, isDemo))
       setSelectedType(null)
       setSelectedWeek(null)
       setSwap({ phase: 'in', direction })
@@ -404,49 +443,56 @@ function Dashboard() {
 
   return (
     <div className="app-canvas relative min-h-screen text-zinc-900">
-      <div aria-hidden="true" className="page-grid-mask pointer-events-none fixed inset-0 z-0">
-        <svg className="absolute h-0 w-0">
-          <filter id="grid-wave" x="-40%" y="-40%" width="180%" height="180%">
-            <feTurbulence type="fractalNoise" baseFrequency="0.0045 0.008" numOctaves="2" seed="4" result="noise" />
-            <feOffset in="noise" dx="0" dy="0" result="drift">
-              <animate
-                attributeName="dx"
-                dur="41s"
-                repeatCount="indefinite"
-                calcMode="spline"
-                keyTimes="0;0.29;0.56;0.83;1"
-                keySplines="0.42 0 0.18 1;0.55 0.05 0.45 0.95;0.22 1 0.36 1;0.7 0 0.3 1"
-                values="0;168;-74;96;0"
-              />
-              <animate
-                attributeName="dy"
-                dur="57s"
-                repeatCount="indefinite"
-                calcMode="spline"
-                keyTimes="0;0.18;0.47;0.76;1"
-                keySplines="0.33 0 0.2 1;0.48 0.02 0.52 1;0.16 1 0.3 1;0.65 0 0.35 1"
-                values="0;84;-142;46;0"
-              />
-            </feOffset>
-            <feDisplacementMap in="SourceGraphic" in2="drift" scale="20" xChannelSelector="R" yChannelSelector="G">
-              <animate
-                attributeName="scale"
-                dur="33s"
-                repeatCount="indefinite"
-                calcMode="spline"
-                keyTimes="0;0.34;0.69;1"
-                keySplines="0.45 0 0.2 1;0.4 0 0.6 1;0.22 1 0.36 1"
-                values="14;26;11;14"
-              />
-            </feDisplacementMap>
-          </filter>
-        </svg>
-        <div className="page-grid" />
+      <div
+        aria-hidden="true"
+        className={`page-grid-mask pointer-events-none fixed inset-0 z-0${IOS_LITE_GRID ? ' page-grid-mask--lite' : ''}`}
+      >
+        {IOS_LITE_GRID ? null : (
+          <svg className="absolute h-0 w-0">
+            <filter id="grid-wave" x="-40%" y="-40%" width="180%" height="180%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.0045 0.008" numOctaves="2" seed="4" result="noise" />
+              <feOffset in="noise" dx="0" dy="0" result="drift">
+                <animate
+                  attributeName="dx"
+                  dur="41s"
+                  repeatCount="indefinite"
+                  calcMode="spline"
+                  keyTimes="0;0.29;0.56;0.83;1"
+                  keySplines="0.42 0 0.18 1;0.55 0.05 0.45 0.95;0.22 1 0.36 1;0.7 0 0.3 1"
+                  values="0;168;-74;96;0"
+                />
+                <animate
+                  attributeName="dy"
+                  dur="57s"
+                  repeatCount="indefinite"
+                  calcMode="spline"
+                  keyTimes="0;0.18;0.47;0.76;1"
+                  keySplines="0.33 0 0.2 1;0.48 0.02 0.52 1;0.16 1 0.3 1;0.65 0 0.35 1"
+                  values="0;84;-142;46;0"
+                />
+              </feOffset>
+              <feDisplacementMap in="SourceGraphic" in2="drift" scale="20" xChannelSelector="R" yChannelSelector="G">
+                <animate
+                  attributeName="scale"
+                  dur="33s"
+                  repeatCount="indefinite"
+                  calcMode="spline"
+                  keyTimes="0;0.34;0.69;1"
+                  keySplines="0.45 0 0.2 1;0.4 0 0.6 1;0.22 1 0.36 1"
+                  values="14;26;11;14"
+                />
+              </feDisplacementMap>
+            </filter>
+          </svg>
+        )}
+        <div className={IOS_LITE_GRID ? 'page-grid page-grid--lite' : 'page-grid'} />
       </div>
       <main className="relative z-10 mx-auto flex w-full max-w-xl flex-col gap-5 px-4 py-10">
         <header>
           <div className="flex items-baseline justify-between gap-4">
-            <p className="text-sm font-medium text-zinc-500">Shortcuts Finance</p>
+            <p className="text-sm font-medium text-zinc-500">
+              {isDemo ? 'Shortcuts Finance Demo' : 'Shortcuts Finance'}
+            </p>
             <button
               type="button"
               onClick={() => supabase.auth.signOut()}
@@ -470,8 +516,14 @@ function Dashboard() {
           <button
             type="button"
             aria-label="Previous month"
+            disabled={
+              isDemo &&
+              DEMO_MONTHS.findIndex(
+                (item) => item.year === selectedMonth.year && item.month === selectedMonth.month,
+              ) <= 0
+            }
             onClick={() => showMonth(-1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-200"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-200 disabled:opacity-30 disabled:hover:bg-transparent"
           >
             <ChevronLeft size={18} />
           </button>
@@ -488,8 +540,15 @@ function Dashboard() {
           <button
             type="button"
             aria-label="Next month"
+            disabled={
+              isDemo &&
+              DEMO_MONTHS.findIndex(
+                (item) => item.year === selectedMonth.year && item.month === selectedMonth.month,
+              ) ===
+                DEMO_MONTHS.length - 1
+            }
             onClick={() => showMonth(1)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-200"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-200 disabled:opacity-30 disabled:hover:bg-transparent"
           >
             <ChevronRight size={18} />
           </button>
@@ -730,7 +789,7 @@ export default function App() {
       data-phase={phase}
       style={{ transitionDuration: `${AUTH_OUT_MS}ms`, animationDuration: `${AUTH_IN_MS}ms` }}
     >
-      {view === 'dashboard' ? <Dashboard /> : <Login />}
+      {view === 'dashboard' ? <Dashboard email={session?.user?.email} /> : <Login />}
     </div>
   )
 }
