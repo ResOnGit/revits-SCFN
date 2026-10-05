@@ -11,15 +11,18 @@ following the release, the way to set up revits SCFN are
 ```
 APPLE SHORTCUTS <---> SUPABASE <-----> SCFN Dashboard (github pages)
 ```
-requires minimal to no maintenance at all, security is set up by the secrets page and magic link provided by supa's.
-
-# As of 1.1
-New flashy UI. Dates are shown in Malaysia time, with the weekday. Amounts are shown in ringgit.
-The budget ring is capped at RM800 and ignores the STRING type Out of budget. Clicking a pie slice filters Recent. Recent can also be filtered by week inside the month.
-See releasenotes/1.1.md.
+requires minimal to no maintenance at all, security is set up by the secrets page and magic link (OR otp) provided by supa's.
 
 
-### future additions (roadmap)
+# As of 1.2
+Each account only sees its own rows. The Shortcut still posts with the anon key, and those rows stay on the owner account.
+A demo login, dummy@scfn.app, opens September 2026 and can only move between August, September, and October. The header reads Shortcuts Finance Demo.
+On iPhone, including the Home Screen app, the background grid and the pie are drawn lighter so the page does not stall.
+See the 1.2 release notes.
+
+
+
+### future additions (roadmap) 2.0
 - dates to be international (toggled in app)
 - ability to delete a transaction
 - ability to edit a transaction
