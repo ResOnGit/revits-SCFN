@@ -6,6 +6,13 @@
 
 SCFN is an open-source personal spending dashboard. An iPhone Shortcut records each spend. The site shows that month’s total, a budget ring, a pie of spending by type, and the list of transactions.
 
+# Spending types  (Shortcuts Users)
+It is stored in transactions row. Types of transactions are string you can invent yourself and the app *will* pick up on it. 
+Provided you set the list and values right on shortcut's side.
+
+`out of budget` is an exclusive hard coded transaction type that **will** be ignored by the budget ring inside the app.
+
+
 # FLOW
 following the release, the way to set up revits SCFN are
 ```
